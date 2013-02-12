@@ -1,0 +1,21 @@
+{
+    "jdbcConnectionInfo" : {
+        "driverClass" : "org.postgresql.Driver",
+        "connectionString" : "jdbc:postgresql://localhost:5432/blist_dev",
+        "userName" : "someUser",
+        "password" : "somePassword"
+    },
+    "socrataConnectionInfo" : {
+        "url" : "https://sandbox.demo.socrata.com",
+        "user": "testuser@gmail.com",
+        "password" : "OpenData",
+        "token" : "D8Atrg62F2j017ZTdkMpuZ9vY"
+    },
+    "datasetsToImport" : {
+        "testJdbcImport" : {
+            "description" : "This is a test dataset named 'testJdbcImport'",
+            "importQuery" : "select * from domain_users"
+        }
+    }
+
+}
