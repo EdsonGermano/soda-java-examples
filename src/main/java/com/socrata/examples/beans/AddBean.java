@@ -1,17 +1,13 @@
-package com.socrata.beans;
+package com.socrata.examples.beans;
 
 import com.google.common.collect.Lists;
 import com.socrata.api.HttpLowLevel;
 import com.socrata.api.Soda2Producer;
 import com.socrata.api.SodaImporter;
-import com.socrata.beans.TestBean;
 import com.socrata.builders.DatasetBuilder;
 import com.socrata.exceptions.SodaError;
-import com.socrata.importer.ConfigurationLoader;
-import com.socrata.importer.JdbcImporter;
-import com.socrata.importer.model.ImportConfiguration;
-import com.socrata.importer.model.JdbcConnectionInfo;
-import com.socrata.importer.model.SocrataConnectionInfo;
+import com.socrata.tools.utils.ConfigurationLoader;
+import com.socrata.tools.model.SocrataConnectionInfo;
 import com.socrata.model.UpsertResult;
 import com.socrata.model.importer.Column;
 import com.socrata.model.importer.Dataset;
@@ -19,11 +15,9 @@ import com.socrata.model.importer.DatasetInfo;
 
 import java.io.File;
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 
 /**
  * This class simply provides an example of adding objects to
@@ -54,7 +48,7 @@ public class AddBean
         }
 
         //Load config
-        final SocrataConnectionInfo importConfiguration = ConfigurationLoader.loadSocrataConfig(configFile);
+        final SocrataConnectionInfo importConfiguration = ConfigurationLoader.loadSocrataConnectionConfig(configFile);
         final AddBean     addBean = new AddBean(importConfiguration);
 
         //Create the dataset
@@ -105,9 +99,9 @@ public class AddBean
                 .addColumn(new Column(null, "count", "count", "count Description", "Number", 3, 120))
                 .addColumn(new Column(null, "date", "date", "date Description", "calendar_date", 4, 120));
 
-        Dataset dataset = sodaImporter.createView(datasetBuilder.build());
+        Dataset dataset = (Dataset) sodaImporter.createDataset(datasetBuilder.build());
         dataset.setupRowIdentifierColumnByName("name");
-        sodaImporter.updateView(dataset);
+        sodaImporter.updateDatasetInfo(dataset);
         return sodaImporter.publish(dataset.getId());
     }
 

@@ -1,22 +1,21 @@
-package com.socrata.importer;
+package com.socrata.tools.importer;
 
 import au.com.bytecode.opencsv.CSVWriter;
 import com.socrata.api.HttpLowLevel;
 import com.socrata.api.Soda2Producer;
-import com.socrata.api.SodaDdl;
 import com.socrata.api.SodaImporter;
 import com.socrata.builders.DatasetBuilder;
 import com.socrata.exceptions.SodaError;
-import com.socrata.importer.model.DataImportConfiguration;
-import com.socrata.importer.model.ImportConfiguration;
-import com.socrata.importer.model.JdbcConnectionInfo;
-import com.socrata.importer.model.SocrataConnectionInfo;
+import com.socrata.tools.model.DataImportConfiguration;
+import com.socrata.tools.model.ImportConfiguration;
+import com.socrata.tools.model.JdbcConnectionInfo;
+import com.socrata.tools.model.SocrataConnectionInfo;
 import com.socrata.model.UpsertResult;
 import com.socrata.model.importer.Column;
 import com.socrata.model.importer.Dataset;
 import com.socrata.model.importer.DatasetInfo;
+import com.socrata.tools.utils.ConfigurationLoader;
 import com.socrata.utils.ColumnUtil;
-import org.apache.commons.cli.Options;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -26,8 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPOutputStream;
-import java.util.zip.ZipOutputStream;
 
 /**
  * This is a class that is able to import a query on a database into a dataset in Socrata.
@@ -83,7 +80,7 @@ public class JdbcImporter
             DataImportConfiguration dataImportConfiguration = entry.getValue();
             System.out.println("Importing: " + entry.getKey() + ".  With query=\"" + dataImportConfiguration.importQuery + "\"");
 
-            Dataset createdDataset = jdbcImporter.createDatasetFromBigQuery(entry.getKey(), dataImportConfiguration.description, dataImportConfiguration.importQuery);
+            DatasetInfo createdDataset = jdbcImporter.createDatasetFromBigQuery(entry.getKey(), dataImportConfiguration.description, dataImportConfiguration.importQuery);
             System.out.println("  Successfully created " + createdDataset.getId());
         }
     }
@@ -116,13 +113,13 @@ public class JdbcImporter
      * @param query the query to issue to export data from the database.
      * @return the results of the upsert
      */
-    public Dataset createDatasetFromQuery(String name, String description, String query) throws SQLException, ClassNotFoundException, SodaError, InterruptedException
+    public DatasetInfo createDatasetFromQuery(String name, String description, String query) throws SQLException, ClassNotFoundException, SodaError, InterruptedException
     {
         //  Execute the JDBC Query
         final ResultSet resultSet = executeQuery(query);
 
         //  Create a Socrata Dataset from the resultset
-        final Dataset dataset = createDataset(name, description, resultSet);
+        final DatasetInfo dataset = createDataset(name, description, resultSet);
 
         //  Now, add the results from the query into the dataset
         final UpsertResult retVal = upsertQueryResults(dataset, resultSet);
@@ -158,13 +155,13 @@ public class JdbcImporter
      * @param query query to issue
      * @return the created dataset.
      */
-    public Dataset createDatasetFromBigQuery(String name, String description, String query) throws SQLException, ClassNotFoundException, SodaError, InterruptedException, IOException
+    public DatasetInfo createDatasetFromBigQuery(String name, String description, String query) throws SQLException, ClassNotFoundException, SodaError, InterruptedException, IOException
     {
         //  Execute the JDBC Query
         final ResultSet resultSet = executeQuery(query);
 
         //  Create a Socrata Dataset from the resultset
-        final Dataset dataset = createDataset(name, description, resultSet);
+        final DatasetInfo dataset = createDataset(name, description, resultSet);
 
         //  Now, add the results from the query into the dataset
         updateDatasetFromBigQuery(dataset, resultSet);
@@ -197,7 +194,7 @@ public class JdbcImporter
      * @param dataset dataset to add rows to
      * @param resultSet query to pull results from.
      */
-    public void updateDatasetFromBigQuery(final Dataset dataset, final ResultSet resultSet) throws SQLException, ClassNotFoundException, IOException, SodaError, InterruptedException
+    public void updateDatasetFromBigQuery(final DatasetInfo dataset, final ResultSet resultSet) throws SQLException, ClassNotFoundException, IOException, SodaError, InterruptedException
     {
         updateDatasetFromBigQuery(dataset, resultSet, true);
     }
@@ -213,7 +210,7 @@ public class JdbcImporter
      * @param createWorkingCopy whether to create a working copy or not.  If this is false, the dataset should
      *                          already be a working copy, but will be published as part of this call.
      */
-    public void updateDatasetFromBigQuery(final Dataset dataset, final ResultSet resultSet, boolean createWorkingCopy) throws SQLException, ClassNotFoundException, IOException, SodaError, InterruptedException
+    public void updateDatasetFromBigQuery(final DatasetInfo dataset, final ResultSet resultSet, boolean createWorkingCopy) throws SQLException, ClassNotFoundException, IOException, SodaError, InterruptedException
     {
 
         //  Write as a csv file
@@ -269,7 +266,7 @@ public class JdbcImporter
      * @param resultSet
      * @return
      */
-    public UpsertResult upsertQueryResults(Dataset dataset, ResultSet resultSet) throws SodaError, InterruptedException, SQLException
+    public UpsertResult upsertQueryResults(DatasetInfo dataset, ResultSet resultSet) throws SodaError, InterruptedException, SQLException
     {
         List results = new ArrayList();
         while (resultSet.next()) {
@@ -288,7 +285,7 @@ public class JdbcImporter
      * @param resultSet the resultset that comes as a result of the last query.
      * @return The dataset that was created.
      */
-    public Dataset createDataset(String name, String description, ResultSet resultSet) throws SQLException, SodaError, InterruptedException
+    public DatasetInfo createDataset(String name, String description, ResultSet resultSet) throws SQLException, SodaError, InterruptedException
     {
         final ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
 
@@ -307,7 +304,7 @@ public class JdbcImporter
         }
 
         //Create the dataset on the Socrata side
-        return sodaImporter.createView(builder.build());
+        return sodaImporter.createDataset(builder.build());
 
     }
 

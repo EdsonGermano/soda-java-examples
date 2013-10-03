@@ -1,23 +1,24 @@
-package com.socrata.importer;
+package com.socrata.tools;
 
+import com.socrata.exceptions.LongRunningQueryException;
 import com.socrata.exceptions.SodaError;
-import com.socrata.importer.model.JdbcConnectionInfo;
-import com.socrata.importer.model.SocrataConnectionInfo;
-import com.socrata.model.UpsertResult;
+import org.apache.commons.lang3.tuple.Pair;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.File;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.sql.SQLException;
+import java.util.List;
 
 /**
- * This is a test only importer that works if a site does not have a valid certificate yet.
+ * This is a version of copy dataset, that does not do SSL validation.  This is really for test only
+ * scenarios, for any real operations just use the CopyDataset class
  */
-public class InsecureJdbcImport extends JdbcImporter
+public class InsecureCopyDataset extends CopyDataset
 {
     static {
         // Create a trust manager that does not validate certificate chains.  This is only
@@ -38,13 +39,14 @@ public class InsecureJdbcImport extends JdbcImporter
         }
     }
 
-    public static void main(String arg[]) throws ClassNotFoundException, SQLException, InterruptedException, SodaError, IOException
+    public InsecureCopyDataset(String srcDomain, String destDomain, String userName, String userPassword, String token, File dataFileDir, List<Pair<String, String>> parsedCreateOptions, boolean createOnly, boolean copyDataLive)
     {
-        JdbcImporter.main(arg);
+        super(srcDomain, destDomain, userName, userPassword, token, dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
     }
 
-    public InsecureJdbcImport(SocrataConnectionInfo socrataConnectionInfo, JdbcConnectionInfo jdbcConnectionInfo)
+    public static void main(String[] args) throws SodaError, InterruptedException, IOException, LongRunningQueryException
     {
-        super(socrataConnectionInfo, jdbcConnectionInfo);
+        CopyDataset.main(args);
     }
+
 }

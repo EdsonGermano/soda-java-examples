@@ -1,4 +1,4 @@
-package com.socrata.beans;
+package com.socrata.examples.beans;
 
 import java.util.Date;
 

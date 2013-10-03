@@ -1,4 +1,4 @@
-package com.socrata.importer;
+package com.socrata.tools.utils;
 
 /**
  *

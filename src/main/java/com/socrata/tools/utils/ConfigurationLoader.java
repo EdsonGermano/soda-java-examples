@@ -1,8 +1,7 @@
-package com.socrata.importer;
+package com.socrata.tools.utils;
 
-import com.socrata.importer.model.ImportConfiguration;
-import com.socrata.importer.model.SocrataConnectionInfo;
-import org.codehaus.jackson.JsonParseException;
+import com.socrata.tools.model.ImportConfiguration;
+import com.socrata.tools.model.SocrataConnectionInfo;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.File;
@@ -23,7 +22,7 @@ public class ConfigurationLoader
         }
     }
 
-    static public SocrataConnectionInfo loadSocrataConfig(final File file)
+    static public SocrataConnectionInfo loadSocrataConnectionConfig(final File file)
     {
         try {
             return OBJECT_MAPPER.readValue(file, SocrataConnectionInfo.class);
