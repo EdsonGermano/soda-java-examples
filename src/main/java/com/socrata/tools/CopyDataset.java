@@ -53,6 +53,12 @@ public class CopyDataset
                                           .withDescription(  "The configuration file to load for user source domain URL/name/password/apptoken.  Defaults to ~/.socrata/connection.json" )
                                           .create("c");
 
+    public static final Option DEST_CONFIG_FILE   = OptionBuilder.withArgName("destConnectionConfig")
+                                                            .hasArg()
+                                                            .withDescription(  "The configuration file to load for user destination domain URL/name/password/apptoken.  Defaults to whatever is used for the source domain." )
+                                                            .create("x");
+
+
     public static final Option DATA_FILE   = OptionBuilder.withArgName("dataFile")
                                            .hasArg()
                                            .withDescription("The directory to look for data files to upload to the newly created dataset.  " +
@@ -90,16 +96,16 @@ public class CopyDataset
         OPTIONS.addOption(CREATE_OPTIONS);
         OPTIONS.addOption(COPY_DATA);
         OPTIONS.addOption(USAGE_OPTIONS);
+        OPTIONS.addOption(DEST_CONFIG_FILE);
     }
 
 
     final boolean createOnly;
     final boolean copyDataLive;
+    final SocrataConnectionInfo srcConnectionInfo;
+    final SocrataConnectionInfo destConnectionInfo;
     final String srcDomain;
     final String destDomain;
-    final String userName;
-    final String userPassword;
-    final String token;
     final File   dataFileDir;
     final List<Pair<String, String>> parsedCreateOptions;
 
@@ -119,6 +125,7 @@ public class CopyDataset
         try {
             CommandLine         cmd = parser.parse(OPTIONS, args, false);
             String configFile = cmd.getOptionValue("c", CliUtils.defaultConfigFile().getCanonicalPath());
+            String destConfigFile = cmd.getOptionValue("x", configFile);
 
             if (cmd.hasOption("?")) {
                 HelpFormatter formatter = new HelpFormatter();
@@ -133,8 +140,18 @@ public class CopyDataset
                     throw new IllegalArgumentException("Unable to load connection configuration from " + configFile + ".  Either use the -c option or setup a connection file there.");
                 }
 
+                final File destConfig = new File(destConfigFile);
+                if (!destConfig.canRead()) {
+                    throw new IllegalArgumentException("Unable to load connection configuration from " + destConfig + ".  Either use the -x option or setup a connection file there.");
+                }
+
+
                 final SocrataConnectionInfo connectionInfo = ConfigurationLoader.loadSocrataConnectionConfig(config);
                 CliUtils.validateConfiguration(connectionInfo);
+
+                final SocrataConnectionInfo destConnectionInfo = ConfigurationLoader.loadSocrataConnectionConfig(destConfig);
+                CliUtils.validateConfiguration(destConnectionInfo);
+
 
                 final String srcDomain = cmd.getOptionValue("s", connectionInfo.getUrl());
                 if (StringUtils.isEmpty(srcDomain)) {
@@ -149,7 +166,7 @@ public class CopyDataset
                 final boolean createOnly = cmd.hasOption("C");
 
 
-                final CopyDataset copyDataset = new CopyDataset(srcDomain, destDomain, connectionInfo.getUser(), connectionInfo.getPassword(), connectionInfo.getToken(), dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
+                final CopyDataset copyDataset = new CopyDataset(srcDomain, destDomain, connectionInfo, destConnectionInfo, dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
                 final List<Pair<Dataset, UpsertResult>> results = copyDataset.doCopy(cmd.getArgs());
 
                 for (Pair<Dataset, UpsertResult> result : results) {
@@ -171,13 +188,12 @@ public class CopyDataset
         }
     }
 
-    public CopyDataset(String srcDomain, String destDomain, String userName, String userPassword, String token, File dataFileDir, List<Pair<String, String>> parsedCreateOptions, boolean createOnly, boolean copyDataLive)
+    public CopyDataset(String srcDomain, String destDomain, SocrataConnectionInfo srcConnectionInfo, SocrataConnectionInfo destConnectionInfo, File dataFileDir, List<Pair<String, String>> parsedCreateOptions, boolean createOnly, boolean copyDataLive)
     {
         this.srcDomain = srcDomain;
         this.destDomain = destDomain;
-        this.userName = userName;
-        this.userPassword = userPassword;
-        this.token = token;
+        this.srcConnectionInfo = srcConnectionInfo;
+        this.destConnectionInfo = destConnectionInfo;
         this.dataFileDir = dataFileDir;
         this.parsedCreateOptions = parsedCreateOptions;
         this.createOnly = createOnly;
@@ -196,8 +212,8 @@ public class CopyDataset
     public Pair<Dataset, UpsertResult> doCopy(String datasetId) throws SodaError, InterruptedException, LongRunningQueryException, IOException
     {
 
-        final SodaDdl ddlSrc = SodaDdl.newDdl(srcDomain, userName, userPassword, token);
-        final SodaDdl ddlDest = SodaDdl.newDdl(destDomain, userName, userPassword, token);
+        final SodaDdl ddlSrc = SodaDdl.newDdl(srcDomain, srcConnectionInfo.getUser(), srcConnectionInfo.getPassword(), srcConnectionInfo.getToken());
+        final SodaDdl ddlDest = SodaDdl.newDdl(destDomain, destConnectionInfo.getUser(), destConnectionInfo.getPassword(), destConnectionInfo.getToken());
 
 
         for (Pair<String, String> createOption : parsedCreateOptions) {
@@ -207,9 +223,8 @@ public class CopyDataset
         final Dataset srcDataset = loadSourceSchema(ddlSrc, datasetId);
         final DatasetInfo destDatasetTemplate = Dataset.copy(srcDataset);
         final Dataset destDataset = createDestSchema(ddlDest, srcDataset, destDatasetTemplate);
-        ddlDest.publish(destDataset.getId());
 
-        final Soda2Producer producerDest = Soda2Producer.newProducer(destDomain, userName, userPassword, token);
+        final Soda2Producer producerDest = Soda2Producer.newProducer(destDomain, destConnectionInfo.getUser(), destConnectionInfo.getPassword(), destConnectionInfo.getToken());
 
         UpsertResult    upsertResult = new UpsertResult(0, 0, 0, null);
 
@@ -221,6 +236,8 @@ public class CopyDataset
                 upsertResult = importDataFile(producerDest, destDataset.getId(), dataFileDir);
             }
         }
+
+        //producerDest.truncate(destDataset.getId());
 
         return Pair.of(destDataset, upsertResult);
     }
@@ -243,6 +260,7 @@ public class CopyDataset
             ddlDest.addColumn(newDataset.getId(), column);
         }
 
+        ddlDest.publish(newDataset.getId());
         return (Dataset) ddlDest.loadDatasetInfo(newDataset.getId());
     }
 
@@ -274,7 +292,7 @@ public class CopyDataset
     public UpsertResult copyDataLive(Soda2Producer producerDest, String srcId, String destId) throws LongRunningQueryException, SodaError, InterruptedException
     {
 
-        final Soda2Consumer querySource = Soda2Consumer.newConsumer(srcDomain, userName, userPassword, token);
+        final Soda2Consumer querySource = Soda2Consumer.newConsumer(srcDomain, srcConnectionInfo.getUser(), srcConnectionInfo.getPassword(), srcConnectionInfo.getToken());
 
         SoqlQueryBuilder    builder = new SoqlQueryBuilder(SoqlQuery.SELECT_ALL)
                 .addOrderByPhrase(new OrderByClause(SortOrder.Ascending, ":id"))

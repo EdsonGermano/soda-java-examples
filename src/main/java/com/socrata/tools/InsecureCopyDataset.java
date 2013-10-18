@@ -2,6 +2,7 @@ package com.socrata.tools;
 
 import com.socrata.exceptions.LongRunningQueryException;
 import com.socrata.exceptions.SodaError;
+import com.socrata.tools.model.SocrataConnectionInfo;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -39,9 +40,9 @@ public class InsecureCopyDataset extends CopyDataset
         }
     }
 
-    public InsecureCopyDataset(String srcDomain, String destDomain, String userName, String userPassword, String token, File dataFileDir, List<Pair<String, String>> parsedCreateOptions, boolean createOnly, boolean copyDataLive)
+    public InsecureCopyDataset(String srcDomain, String destDomain, SocrataConnectionInfo srcConnectionInfo, SocrataConnectionInfo destConnectionInfo, File dataFileDir, List<Pair<String, String>> parsedCreateOptions, boolean createOnly, boolean copyDataLive)
     {
-        super(srcDomain, destDomain, userName, userPassword, token, dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
+        super(srcDomain, destDomain, srcConnectionInfo, destConnectionInfo, dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
     }
 
     public static void main(String[] args) throws SodaError, InterruptedException, IOException, LongRunningQueryException
