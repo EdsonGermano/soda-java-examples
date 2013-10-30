@@ -25,10 +25,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.ws.rs.core.MediaType;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
@@ -166,8 +163,10 @@ public class CopyDataset
                 final boolean createOnly = cmd.hasOption("C");
 
 
+                final Writer      output = new OutputStreamWriter(System.out);
                 final CopyDataset copyDataset = new CopyDataset(srcDomain, destDomain, connectionInfo, destConnectionInfo, dataFileDir, parsedCreateOptions, createOnly, copyDataLive);
-                final List<Pair<Dataset, UpsertResult>> results = copyDataset.doCopy(cmd.getArgs());
+                final List<Pair<Dataset, UpsertResult>> results = copyDataset.doCopy(cmd.getArgs(), output);
+                output.flush();
 
                 for (Pair<Dataset, UpsertResult> result : results) {
                     System.out.println("Created dataset " + destDomain + "/id/" + result.getKey().getId() + ".  Created " + result.getValue().getRowsCreated());
@@ -200,16 +199,16 @@ public class CopyDataset
         this.copyDataLive = copyDataLive;
     }
 
-    public List<Pair<Dataset, UpsertResult>> doCopy(String[] datasetIds) throws SodaError, InterruptedException, LongRunningQueryException, IOException
+    public List<Pair<Dataset, UpsertResult>> doCopy(String[] datasetIds, Writer output) throws SodaError, InterruptedException, LongRunningQueryException, IOException
     {
         List<Pair<Dataset, UpsertResult>>   results = Lists.newArrayList();
         for (String datasetId : datasetIds) {
-            results.add(doCopy(datasetId));
+            results.add(doCopy(datasetId, output));
         }
         return results;
     }
 
-    public Pair<Dataset, UpsertResult> doCopy(String datasetId) throws SodaError, InterruptedException, LongRunningQueryException, IOException
+    public Pair<Dataset, UpsertResult> doCopy(String datasetId, Writer output) throws SodaError, InterruptedException, LongRunningQueryException, IOException
     {
 
         final SodaDdl ddlSrc = SodaDdl.newDdl(srcDomain, srcConnectionInfo.getUser(), srcConnectionInfo.getPassword(), srcConnectionInfo.getToken());
@@ -222,7 +221,7 @@ public class CopyDataset
 
         final Dataset srcDataset = loadSourceSchema(ddlSrc, datasetId);
         final DatasetInfo destDatasetTemplate = Dataset.copy(srcDataset);
-        final Dataset destDataset = createDestSchema(ddlDest, srcDataset, destDatasetTemplate);
+        final Dataset destDataset = createDestSchema(ddlDest, srcDataset, destDatasetTemplate, output);
 
         final Soda2Producer producerDest = Soda2Producer.newProducer(destDomain, destConnectionInfo.getUser(), destConnectionInfo.getPassword(), destConnectionInfo.getToken());
 
@@ -231,13 +230,13 @@ public class CopyDataset
         //Now for the data part
         if (!createOnly) {
             if (copyDataLive) {
-                upsertResult = copyDataLive(producerDest, srcDataset.getId(), destDataset.getId());
+                upsertResult = copyDataLive(producerDest, srcDataset.getId(), destDataset.getId(), output);
             } else {
-                upsertResult = importDataFile(producerDest, destDataset.getId(), dataFileDir);
+                upsertResult = importDataFile(producerDest, destDataset.getId(), dataFileDir, output);
             }
         }
 
-        //producerDest.truncate(destDataset.getId());
+        producerDest.truncate(destDataset.getId());
 
         return Pair.of(destDataset, upsertResult);
     }
@@ -253,11 +252,21 @@ public class CopyDataset
         return (Dataset) datasetInfo;
     }
 
-    public static Dataset createDestSchema(SodaDdl ddlDest, Dataset srcDataset, DatasetInfo destDatasetTemplate) throws SodaError, InterruptedException
+    public static Dataset createDestSchema(SodaDdl ddlDest, Dataset srcDataset, DatasetInfo destDatasetTemplate, Writer output) throws SodaError, InterruptedException, IOException
     {
+        destDatasetTemplate.setResourceName(null);
         Dataset newDataset = (Dataset) ddlDest.createDataset(destDatasetTemplate);
+        if (output != null) {
+            output.write("Created dataset " + newDataset.getName() + ".  4x4 is " + newDataset.getId() + "\n");
+            output.flush();
+        }
+
         for (Column column  : srcDataset.getColumns()) {
             ddlDest.addColumn(newDataset.getId(), column);
+            if (output != null) {
+                output.write("Added column " + column.getName() + ".\n");
+                output.flush();
+            }
         }
 
         ddlDest.publish(newDataset.getId());
@@ -265,10 +274,10 @@ public class CopyDataset
     }
 
     @Nonnull
-    public static UpsertResult importDataFile(Soda2Producer producerDest, String destId, File dataFile) throws IOException, SodaError, InterruptedException
+    public static UpsertResult importDataFile(Soda2Producer producerDest, String destId, File dataFile, Writer output) throws IOException, SodaError, InterruptedException
     {
         if (!dataFile.exists()) {
-            throw new SodaError(dataFile.getCanonicalPath() + " does not exist.");
+            throw new SodaError(dataFile.getCanonicalPath() + " does not exist.\n");
         }
 
         String unprocecessedName = dataFile.getName();
@@ -286,12 +295,20 @@ public class CopyDataset
             mediaType = HttpLowLevel.JSON_TYPE;
         }
 
+        if (output != null) {
+            output.write("Upserting file " + dataFile.getCanonicalPath() + " as " + mediaType + "\n");
+            output.flush();
+        }
         return producerDest.upsertStream(destId, mediaType, is);
     }
 
-    public UpsertResult copyDataLive(Soda2Producer producerDest, String srcId, String destId) throws LongRunningQueryException, SodaError, InterruptedException
+    public UpsertResult copyDataLive(Soda2Producer producerDest, String srcId, String destId, Writer output) throws LongRunningQueryException, SodaError, InterruptedException, IOException
     {
 
+        if (output != null) {
+            output.write("Copying data live from " + srcId + ".\n");
+            output.flush();
+        }
         final Soda2Consumer querySource = Soda2Consumer.newConsumer(srcDomain, srcConnectionInfo.getUser(), srcConnectionInfo.getPassword(), srcConnectionInfo.getToken());
 
         SoqlQueryBuilder    builder = new SoqlQueryBuilder(SoqlQuery.SELECT_ALL)
@@ -308,6 +325,17 @@ public class CopyDataset
 
             offset+=1000;
             rowsAdded+=result.getRowsCreated();
+
+            if (output != null) {
+                if ((rowsAdded % 40000) == 0) {
+                    output.write('\n');
+                    output.flush();
+                } else {
+                    output.write('.');
+                    output.flush();
+                }
+            }
+
 
             if (result.getRowsCreated() == 0) {
                 hasMore = false;
