@@ -236,8 +236,6 @@ public class CopyDataset
             }
         }
 
-        producerDest.truncate(destDataset.getId());
-
         return Pair.of(destDataset, upsertResult);
     }
 
