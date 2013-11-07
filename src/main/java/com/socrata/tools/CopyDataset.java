@@ -184,6 +184,10 @@ public class CopyDataset
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp( "copydataset", OPTIONS );
             System.exit(1);
+        } catch (Exception e) {
+            System.err.println( "Failure copying dataset: " + e.getMessage() );
+            e.printStackTrace();
+            System.exit(1);
         }
     }
 
