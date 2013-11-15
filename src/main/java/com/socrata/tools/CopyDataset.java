@@ -223,21 +223,27 @@ public class CopyDataset
             ddlDest.getHttpLowLevel().getAdditionalParameters().put(createOption.getKey(), createOption.getValue());
         }
 
+        final long startSchemaCopy = System.currentTimeMillis();
         final Dataset srcDataset = loadSourceSchema(ddlSrc, datasetId);
         final DatasetInfo destDatasetTemplate = Dataset.copy(srcDataset);
         final Dataset destDataset = createDestSchema(ddlDest, srcDataset, destDatasetTemplate, output);
-
+        final long endSchemaCopy = System.currentTimeMillis();
         final Soda2Producer producerDest = Soda2Producer.newProducer(destDomain, destConnectionInfo.getUser(), destConnectionInfo.getPassword(), destConnectionInfo.getToken());
+
+        output.write("{schemaCopyTime:" + (endSchemaCopy-startSchemaCopy) + "}\n");
 
         UpsertResult    upsertResult = new UpsertResult(0, 0, 0, null);
 
         //Now for the data part
         if (!createOnly) {
+            final long startDataCopy = System.currentTimeMillis();
             if (copyDataLive) {
                 upsertResult = copyDataLive(producerDest, srcDataset.getId(), destDataset.getId(), output);
             } else {
                 upsertResult = importDataFile(producerDest, destDataset.getId(), dataFileDir, output);
             }
+            final long endDataCopy = System.currentTimeMillis();
+            output.write("{dataCopyTime:" + (endDataCopy-startDataCopy) + "}\n");
         }
 
         return Pair.of(destDataset, upsertResult);
