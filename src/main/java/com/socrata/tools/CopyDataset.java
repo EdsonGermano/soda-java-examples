@@ -249,7 +249,6 @@ public class CopyDataset
         return Pair.of(destDataset, upsertResult);
     }
 
-
     public static Dataset loadSourceSchema(SodaDdl ddlSrc, String datasetId) throws SodaError, InterruptedException
     {
         final DatasetInfo datasetInfo = ddlSrc.loadDatasetInfo(datasetId);
